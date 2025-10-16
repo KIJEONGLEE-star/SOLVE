@@ -88,4 +88,23 @@ void simulate(void) {
             arr[i].id = sid;
             arr[i].score = s;
         }
-        qsort(arr, r
+        qsort(arr, rCount, sizeof(Pair), cmp_desc);
+
+        int take = (Ncap<rCount)? Ncap:rCount;
+        int newCount = 0;
+        for(int i=0;i<rCount;i++){
+            int sid = arr[i].id;
+            if(i<take) assignedUniversity[sid] = u;
+            else rList[newCount++] = sid;
+        }
+        rCount = newCount;
+    }
+
+    needsUpdate = false;
+}
+
+// ------------------ 추천 대학 ------------------
+int suggest(int mID){
+    if(needsUpdate) simulate();
+    return assignedUniversity[mID]?assignedUniversity[mID]:-1;
+}
