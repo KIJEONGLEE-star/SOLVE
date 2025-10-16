@@ -68,12 +68,22 @@ int suggest(int mID)
 			int selectedStudent = -1;
 
 			for(int m=1; m<=MAX_STUDENTS; m++){
-				if(!globalSelected[m] && universityScores[m][u] > maxScore) {
-					maxScore = universityScores[m][u];
-					selectedStudent = m;
+				bool hasValidScore = false;
+				for(int s=0; s<NUM_SUBJECTS; s++) {
+					if(system[m][s] != 0) {
+						hasValidScore = true;
+						break;
+					}
 				}
-				else if (!globalSelected[m] && universityScores[m][u] == maxScore && m < selectedStudent) {
-					selectedStudent = m;
+				
+				if(!globalSelected[m] && hasValidScore && universityScores[m][u] >= 0) {
+					if(universityScores[m][u] > maxScore) {
+						maxScore = universityScores[m][u];
+						selectedStudent = m;
+					}
+					else if (universityScores[m][u] == maxScore && m < selectedStudent) {
+						selectedStudent = m;
+					}
 				}
 			}
 			if(selectedStudent == -1) break;
