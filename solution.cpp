@@ -141,36 +141,55 @@ int suggest(int mID)
 	int result[MAX_STUDENTS+1] = {0};
 
 	for (int u=1; u<=globalData.M; u++){
-		// Ultra-optimized: Use N repeated max-finding instead of sorting
-		// Time complexity: O(N × activeCount) per university
-		for(int round = 0; round < globalData.N; round++) {
-			int bestScore = -1;
-			int bestStudent = -1;
-			
-			// Find the best remaining student for this university
-			for(int i=0; i<activeCount; i++){
-				int m = activeStudents[i];
-				if(!globalSelected[m] && isActive[m]) {
-					int currentScore = universityScores[m][u];
-					bool isBetter = false;
-					
-					if(currentScore > bestScore) {
-						isBetter = true;
-					} else if(currentScore == bestScore && m < bestStudent) {
-						isBetter = true;
-					}
-					
-					if(isBetter) {
-						bestScore = currentScore;
-						bestStudent = m;
+		// Count remaining students for this university
+		int remainingStudents = 0;
+		int remainingList[MAX_STUDENTS];
+		
+		for(int i=0; i<activeCount; i++){
+			int m = activeStudents[i];
+			if(!globalSelected[m] && isActive[m]) {
+				remainingList[remainingStudents++] = m;
+			}
+		}
+		
+		// Early selection optimization: if remaining <= N, select all without score calculations
+		if(remainingStudents <= globalData.N) {
+			for(int i=0; i<remainingStudents; i++) {
+				int studentID = remainingList[i];
+				globalSelected[studentID] = true;
+				result[studentID] = u;
+			}
+		} else {
+			// Traditional selection when we need to rank students
+			for(int round = 0; round < globalData.N; round++) {
+				int bestScore = -1;
+				int bestStudent = -1;
+				
+				// Find the best remaining student for this university
+				for(int i=0; i<activeCount; i++){
+					int m = activeStudents[i];
+					if(!globalSelected[m] && isActive[m]) {
+						int currentScore = universityScores[m][u];
+						bool isBetter = false;
+						
+						if(currentScore > bestScore) {
+							isBetter = true;
+						} else if(currentScore == bestScore && m < bestStudent) {
+							isBetter = true;
+						}
+						
+						if(isBetter) {
+							bestScore = currentScore;
+							bestStudent = m;
+						}
 					}
 				}
+				
+				if(bestStudent == -1) break; // No more eligible students
+				
+				globalSelected[bestStudent] = true;
+				result[bestStudent] = u;
 			}
-			
-			if(bestStudent == -1) break; // No more eligible students
-			
-			globalSelected[bestStudent] = true;
-			result[bestStudent] = u;
 		}
 	}
 	
