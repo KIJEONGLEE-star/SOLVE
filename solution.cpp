@@ -9,6 +9,10 @@ int activeStudents[MAX_STUDENTS];
 int activeCount = 0;
 bool isActive[MAX_STUDENTS+1] = {false};
 
+// Ultra-simple: Pre-computed assignments for O(1) lookup
+int assignedUniversity[MAX_STUDENTS+1] = {0};
+bool needsUpdate = true;
+
 
 
 typedef struct {
@@ -35,6 +39,8 @@ void init(int N, int M, int mWeights[][5])
 	// Reset active student tracking
 	activeCount = 0;
 	for(int i=0; i<=MAX_STUDENTS; i++) isActive[i] = false;
+	for(int i=0; i<=MAX_STUDENTS; i++) assignedUniversity[i] = 0;
+	needsUpdate = true;
 	
 	if(N<2 || N>1000 || M<2 || M>30) return;
 	globalData.N=N;
@@ -54,6 +60,7 @@ void add(int mID, int mScores[5])
 		activeStudents[activeCount++] = mID;
 		isActive[mID] = true;
 	}
+	needsUpdate = true;
 	
 	for (int j=0; j<NUM_SUBJECTS; j++) studentScores[mID][j] = mScores[j];
 
@@ -87,12 +94,12 @@ void erase(int mID)
 	for(int u=1; u<=globalData.M; u++){
 		universityScores[mID][u] = 0;
 	}
+	needsUpdate = true;
 }
 
-int suggest(int mID)
-{
+void updateAssignments() {
 	bool globalSelected[MAX_STUDENTS+1] = {false};
-	int result[MAX_STUDENTS+1] = {0};
+	for(int i=0; i<=MAX_STUDENTS; i++) assignedUniversity[i] = 0;
 
 	for (int u=1; u<=globalData.M; u++){
 		// Count remaining eligible students
@@ -103,17 +110,17 @@ int suggest(int mID)
 			}
 		}
 		
-		// Ultra-optimization: if remaining <= N, select all immediately
+		// If remaining <= N, select all immediately
 		if(remainingCount <= globalData.N) {
 			for(int i=0; i<activeCount; i++){
 				int studentID = activeStudents[i];
 				if(!globalSelected[studentID] && isActive[studentID]) {
 					globalSelected[studentID] = true;
-					result[studentID] = u;
+					assignedUniversity[studentID] = u;
 				}
 			}
 		} else {
-			// Only find top N students when needed
+			// Find top N students
 			for(int round = 0; round < globalData.N; round++) {
 				int bestScore = -1;
 				int bestStudent = -1;
@@ -131,12 +138,19 @@ int suggest(int mID)
 				
 				if(bestStudent == -1) break;
 				globalSelected[bestStudent] = true;
-				result[bestStudent] = u;
+				assignedUniversity[bestStudent] = u;
 			}
 		}
 	}
-	
-	return result[mID] != 0 ? result[mID] : -1;
+	needsUpdate = false;
+}
+
+int suggest(int mID)
+{
+	if(needsUpdate) {
+		updateAssignments();
+	}
+	return assignedUniversity[mID] != 0 ? assignedUniversity[mID] : -1;
 }
 
 
