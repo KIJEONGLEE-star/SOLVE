@@ -9,14 +9,10 @@ int activeStudents[MAX_STUDENTS];
 int activeCount = 0;
 bool isActive[MAX_STUDENTS+1] = {false};
 
-// Cache optimization: Track changes to invalidate cached results
-bool scoresChanged = false;
+// Ultra-optimization: Cache simulation results
+int cachedResults[MAX_STUDENTS+1] = {0};
+bool cacheValid = false;
 
-// Optimization: Student-score pairs for faster sorting
-typedef struct {
-	int studentID;
-	int score;
-} StudentScore;
 
 typedef struct {
 	int weights[5];
@@ -42,7 +38,7 @@ void init(int N, int M, int mWeights[][5])
 	// Reset active student tracking
 	activeCount = 0;
 	for(int i=0; i<=MAX_STUDENTS; i++) isActive[i] = false;
-	scoresChanged = true;
+	cacheValid = false;
 	
 	if(N<2 || N>1000 || M<2 || M>30) return;
 	globalData.N=N;
@@ -62,7 +58,7 @@ void add(int mID, int mScores[5])
 		activeStudents[activeCount++] = mID;
 		isActive[mID] = true;
 	}
-	scoresChanged = true;
+	cacheValid = false;
 	
 	for (int j=0; j<NUM_SUBJECTS; j++) studentScores[mID][j] = mScores[j];
 
@@ -96,49 +92,19 @@ void erase(int mID)
 	for(int u=1; u<=globalData.M; u++){
 		universityScores[mID][u] = 0;
 	}
-	scoresChanged = true;
-}
-// Custom quicksort implementation for StudentScore array
-void swap(StudentScore* a, StudentScore* b) {
-	StudentScore temp = *a;
-	*a = *b;
-	*b = temp;
-}
-
-int partition(StudentScore arr[], int low, int high) {
-	StudentScore pivot = arr[high];
-	int i = low - 1;
-	
-	for(int j = low; j < high; j++) {
-		// Sort by score (descending), then by ID (ascending)
-		bool shouldSwap = false;
-		if(arr[j].score > pivot.score) {
-			shouldSwap = true;
-		} else if(arr[j].score == pivot.score && arr[j].studentID < pivot.studentID) {
-			shouldSwap = true;
-		}
-		
-		if(shouldSwap) {
-			i++;
-			swap(&arr[i], &arr[j]);
-		}
-	}
-	swap(&arr[i + 1], &arr[high]);
-	return i + 1;
-}
-
-void quickSort(StudentScore arr[], int low, int high) {
-	if(low < high) {
-		int pi = partition(arr, low, high);
-		quickSort(arr, low, pi - 1);
-		quickSort(arr, pi + 1, high);
-	}
+	cacheValid = false;
 }
 
 int suggest(int mID)
 {
+	// Ultra-optimization: Use cached results if student state hasn't changed
+	if(cacheValid) {
+		return cachedResults[mID];
+	}
+	
+	// Run simulation once and cache all results
 	bool globalSelected[MAX_STUDENTS+1] = {false};
-	int result[MAX_STUDENTS+1] = {0};
+	for(int i=0; i<=MAX_STUDENTS; i++) cachedResults[i] = 0;
 
 	for (int u=1; u<=globalData.M; u++){
 		// Count remaining students for this university
@@ -157,7 +123,7 @@ int suggest(int mID)
 			for(int i=0; i<remainingStudents; i++) {
 				int studentID = remainingList[i];
 				globalSelected[studentID] = true;
-				result[studentID] = u;
+				cachedResults[studentID] = u;
 			}
 		} else {
 			// Traditional selection when we need to rank students
@@ -188,17 +154,14 @@ int suggest(int mID)
 				if(bestStudent == -1) break; // No more eligible students
 				
 				globalSelected[bestStudent] = true;
-				result[bestStudent] = u;
+				cachedResults[bestStudent] = u;
 			}
 		}
 	}
 	
-	if(result[mID] != 0) {
-		return result[mID];
-	}
-	else{
-		return -1;
-	}
+	// Mark cache as valid and return result
+	cacheValid = true;
+	return cachedResults[mID] != 0 ? cachedResults[mID] : -1;
 }
 
 
