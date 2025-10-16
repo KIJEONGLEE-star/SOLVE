@@ -6,214 +6,77 @@
 #define NUM_SUBJECTS 5
 #define MAX_M 30
 
-// ----------------------------
-// Global Data Structures
-// ----------------------------
-int studentScores[MAX_STUDENTS + 1000][NUM_SUBJECTS];
-int universityScores[MAX_STUDENTS + 1000][MAX_M + 1];
-
-int activeStudents[MAX_STUDENTS];
-int activeCount = 0;
-bool isActive[MAX_STUDENTS + 1] = { false };
-int assignedUniversity[MAX_STUDENTS + 1] = { 0 };
-bool needsUpdate = true;
-
 typedef struct {
-	int weights[NUM_SUBJECTS];
-} University;
-
-typedef struct {
-	int N;
-	int M;
-	University universities[MAX_M + 1];
-} Data;
-
-static Data globalData;
-
-// ----------------------------
-// Static temporaries (to avoid stack overhead)
-// ----------------------------
-typedef struct {
-	int id;
-	int score;
+    int id;
+    int score;
 } Pair;
 
-static Pair pairs[MAX_STUDENTS];
-static int remainingArr[MAX_STUDENTS];
-static int newRemainingArr[MAX_STUDENTS];
-static int assignedList[MAX_STUDENTS];
-static bool assignedFlag[MAX_STUDENTS + 1]; // cleared selectively
+int studentScores[MAX_STUDENTS+1][NUM_SUBJECTS];
+int uniWeights[MAX_M+1][NUM_SUBJECTS];
+int assignedUni[MAX_STUDENTS+1];
+int remaining[MAX_STUDENTS];
+int remainingCount = 0;
 
-// ----------------------------
-// Utility
-// ----------------------------
-static inline void resetAssignedFlagsForList(int list[], int cnt) {
-	for (int i = 0; i < cnt; ++i) {
-		assignedFlag[list[i]] = false;
-	}
+// qsort 비교 함수
+int cmp_desc(const void *a, const void *b) {
+    Pair *pa = (Pair*)a;
+    Pair *pb = (Pair*)b;
+    if (pb->score != pa->score) return pb->score - pa->score;
+    return pa->id - pb->id;
 }
 
-static int pair_cmp_desc(const void *a, const void *b)
-{
-	const Pair *pa = (const Pair *)a;
-	const Pair *pb = (const Pair *)b;
-	if (pa->score != pb->score) return (pb->score - pa->score); // descending score
-	return (pa->id - pb->id); // ascending id when tie
+void init(int N, int M, int mWeights[][NUM_SUBJECTS]) {
+    for(int i=1;i<=M;i++)
+        for(int j=0;j<NUM_SUBJECTS;j++)
+            uniWeights[i][j] = mWeights[i-1][j];
+
+    for(int i=0;i<=MAX_STUDENTS;i++)
+        assignedUni[i] = 0;
+    remainingCount = 0;
 }
 
-// ----------------------------
-// Initialization
-// ----------------------------
-void init(int N, int M, int mWeights[][NUM_SUBJECTS])
-{
-	// zero arrays (only what's necessary)
-	for (int i = 0; i < MAX_STUDENTS + 1000; i++)
-		for (int j = 0; j < NUM_SUBJECTS; j++)
-			studentScores[i][j] = 0;
-
-	for (int i = 1; i <= MAX_M; i++)
-		for (int j = 0; j < NUM_SUBJECTS; j++)
-			globalData.universities[i].weights[j] = 0;
-
-	activeCount = 0;
-	for (int i = 0; i <= MAX_STUDENTS; i++) {
-		isActive[i] = false;
-		assignedUniversity[i] = 0;
-		assignedFlag[i] = false;
-	}
-
-	needsUpdate = true;
-	globalData.N = N;
-	globalData.M = M;
-
-	for (int i = 1; i <= M; i++)
-		for (int j = 0; j < NUM_SUBJECTS; j++)
-			globalData.universities[i].weights[j] = mWeights[i - 1][j];
+void add(int mID, int mScores[NUM_SUBJECTS]) {
+    for(int i=0;i<NUM_SUBJECTS;i++)
+        studentScores[mID][i] = mScores[i];
+    remaining[remainingCount++] = mID;
 }
 
-// ----------------------------
-// Add Student
-// ----------------------------
-void add(int mID, int mScores[NUM_SUBJECTS])
-{
-	if (mID > MAX_STUDENTS) return;
-
-	if (!isActive[mID]) {
-		activeStudents[activeCount++] = mID;
-		isActive[mID] = true;
-	}
-	needsUpdate = true;
-
-	for (int j = 0; j < NUM_SUBJECTS; j++)
-		studentScores[mID][j] = mScores[j];
-
-	for (int u = 1; u <= globalData.M; u++) {
-		universityScores[mID][u] =
-			mScores[0] * globalData.universities[u].weights[0] +
-			mScores[1] * globalData.universities[u].weights[1] +
-			mScores[2] * globalData.universities[u].weights[2] +
-			mScores[3] * globalData.universities[u].weights[3] +
-			mScores[4] * globalData.universities[u].weights[4];
-	}
+void erase(int mID) {
+    for(int i=0;i<remainingCount;i++) {
+        if(remaining[i]==mID){
+            remaining[i] = remaining[--remainingCount];
+            return;
+        }
+    }
 }
 
-// ----------------------------
-// Erase Student
-// ----------------------------
-void erase(int mID)
-{
-	if (mID > MAX_STUDENTS || !isActive[mID]) return;
-	isActive[mID] = false;
-	needsUpdate = true;
-}
+int suggest(int N, int M) {
+    int rCount = remainingCount;
+    int rList[MAX_STUDENTS];
+    for(int i=0;i<rCount;i++) rList[i]=remaining[i];
 
-// ----------------------------
-// Update Assignments (sort-based, C qsort)
-// ----------------------------
-void updateAssignments(void)
-{
-	// Build list of currently active students into remainingArr
-	int count = 0;
-	for (int i = 0; i < activeCount; i++) {
-		int sid = activeStudents[i];
-		if (sid <= MAX_STUDENTS && isActive[sid]) {
-			remainingArr[count++] = sid;
-		}
-	}
+    for(int u=1; u<=M; u++) {
+        if(rCount==0) break;
 
-	// Clear assignedUniversity only for active students (faster than clearing all MAX_STUDENTS)
-	for (int i = 0; i < count; i++) {
-		assignedUniversity[remainingArr[i]] = 0;
-	}
+        Pair arr[MAX_STUDENTS];
+        for(int i=0;i<rCount;i++){
+            int sid = rList[i];
+            int s = 0;
+            for(int j=0;j<NUM_SUBJECTS;j++)
+                s += studentScores[sid][j]*uniWeights[u][j];
+            arr[i].id = sid;
+            arr[i].score = s;
+        }
+        qsort(arr, rCount, sizeof(Pair), cmp_desc);
 
-	// Ensure assignedFlag false for active students
-	for (int i = 0; i < count; i++) {
-		assignedFlag[remainingArr[i]] = false;
-	}
-
-	// For each university, sort active students by score desc and assign top N
-	for (int u = 1; u <= globalData.M && count > 0; u++) {
-
-		if (count <= globalData.N) {
-			// All remaining can be assigned to this university
-			for (int i = 0; i < count; i++) {
-				int sid = remainingArr[i];
-				assignedUniversity[sid] = u;
-				assignedFlag[sid] = true;
-			}
-			// no remaining
-			count = 0;
-			break;
-		}
-
-		// build pairs = (id, score) for this university
-		for (int i = 0; i < count; i++) {
-			int sid = remainingArr[i];
-			pairs[i].id = sid;
-			pairs[i].score = universityScores[sid][u];
-		}
-
-		// sort pairs descending by score, tie by smaller id
-		qsort(pairs, count, sizeof(Pair), pair_cmp_desc);
-
-		// take top N
-		int take = globalData.N;
-		int assignedCnt = 0;
-		for (int i = 0; i < take; i++) {
-			int sid = pairs[i].id;
-			assignedUniversity[sid] = u;
-			assignedFlag[sid] = true;
-			assignedList[assignedCnt++] = sid;
-		}
-
-		// build newRemainingArr with unassigned students
-		int newCount = 0;
-		for (int i = 0; i < count; i++) {
-			int sid = remainingArr[i];
-			if (!assignedFlag[sid]) {
-				newRemainingArr[newCount++] = sid;
-			}
-		}
-
-		// clear assignedFlag for those assigned in this round (so next uni can reuse)
-		for (int k = 0; k < assignedCnt; k++) {
-			assignedFlag[assignedList[k]] = false;
-		}
-
-		// swap remainingArr and newRemainingArr (copy newCount back)
-		for (int i = 0; i < newCount; i++)
-			remainingArr[i] = newRemainingArr[i];
-		count = newCount;
-	}
-
-	needsUpdate = false;
-}
-
-// ----------------------------
-// Suggest (final output)
-// ----------------------------
-int suggest(int mID)
-{
-	if (needsUpdate) updateAssignments();
-	return assignedUniversity[mID] != 0 ? assignedUniversity[mID] : -1;
+        int take = (N < rCount)? N:rCount;
+        int newRCount = 0;
+        for(int i=0;i<rCount;i++){
+            int sid = arr[i].id;
+            if(i<take) assignedUni[sid]=u;
+            else rList[newRCount++] = sid;
+        }
+        rCount = newRCount;
+    }
+    return 0;
 }
