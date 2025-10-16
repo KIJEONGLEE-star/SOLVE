@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdbool.h>
 
 #define MAX_STUDENTS 20000
@@ -30,11 +31,34 @@ typedef struct {
 static Data globalData;
 
 // ----------------------------
+// Static temporaries (to avoid stack overhead)
+// ----------------------------
+typedef struct {
+	int id;
+	int score;
+} Pair;
+
+static Pair pairs[MAX_STUDENTS];
+static int remainingArr[MAX_STUDENTS];
+static int newRemainingArr[MAX_STUDENTS];
+static int assignedList[MAX_STUDENTS];
+static bool assignedFlag[MAX_STUDENTS + 1]; // cleared selectively
+
+// ----------------------------
 // Utility
 // ----------------------------
-static inline void swap_int(int* a, int* b)
+static inline void resetAssignedFlagsForList(int list[], int cnt) {
+	for (int i = 0; i < cnt; ++i) {
+		assignedFlag[list[i]] = false;
+	}
+}
+
+static int pair_cmp_desc(const void *a, const void *b)
 {
-	int t = *a; *a = *b; *b = t;
+	const Pair *pa = (const Pair *)a;
+	const Pair *pb = (const Pair *)b;
+	if (pa->score != pb->score) return (pb->score - pa->score); // descending score
+	return (pa->id - pb->id); // ascending id when tie
 }
 
 // ----------------------------
@@ -42,6 +66,7 @@ static inline void swap_int(int* a, int* b)
 // ----------------------------
 void init(int N, int M, int mWeights[][NUM_SUBJECTS])
 {
+	// zero arrays (only what's necessary)
 	for (int i = 0; i < MAX_STUDENTS + 1000; i++)
 		for (int j = 0; j < NUM_SUBJECTS; j++)
 			studentScores[i][j] = 0;
@@ -54,6 +79,7 @@ void init(int N, int M, int mWeights[][NUM_SUBJECTS])
 	for (int i = 0; i <= MAX_STUDENTS; i++) {
 		isActive[i] = false;
 		assignedUniversity[i] = 0;
+		assignedFlag[i] = false;
 	}
 
 	needsUpdate = true;
@@ -102,76 +128,81 @@ void erase(int mID)
 }
 
 // ----------------------------
-// Quickselect Helpers
-// ----------------------------
-int partition(int arr[], int scores[][MAX_M + 1], int left, int right, int pivotIdx, int uID)
-{
-	int pivotScore = scores[arr[pivotIdx]][uID];
-	swap_int(&arr[pivotIdx], &arr[right]);
-	int store = left;
-	for (int i = left; i < right; i++) {
-		int s = scores[arr[i]][uID];
-		if (s > pivotScore || (s == pivotScore && arr[i] < arr[right])) {
-			swap_int(&arr[i], &arr[store]);
-			store++;
-		}
-	}
-	swap_int(&arr[store], &arr[right]);
-	return store;
-}
-
-void quickselect_topN(int arr[], int scores[][MAX_M + 1], int left, int right, int N, int uID)
-{
-	while (left < right) {
-		int pivotIdx = (left + right) / 2;
-		int pivotNew = partition(arr, scores, left, right, pivotIdx, uID);
-		int rank = pivotNew - left + 1;
-		if (rank == N) return;
-		else if (rank > N) right = pivotNew - 1;
-		else { N -= rank; left = pivotNew + 1; }
-	}
-}
-
-// ----------------------------
-// Update Assignments (optimized)
+// Update Assignments (sort-based, C qsort)
 // ----------------------------
 void updateAssignments(void)
 {
-	for (int i = 0; i <= MAX_STUDENTS; i++)
-		assignedUniversity[i] = 0;
-
-	int remaining[MAX_STUDENTS];
+	// Build list of currently active students into remainingArr
 	int count = 0;
-	for (int i = 0; i < activeCount; i++)
-		if (isActive[activeStudents[i]])
-			remaining[count++] = activeStudents[i];
+	for (int i = 0; i < activeCount; i++) {
+		int sid = activeStudents[i];
+		if (sid <= MAX_STUDENTS && isActive[sid]) {
+			remainingArr[count++] = sid;
+		}
+	}
 
-	static bool assigned[MAX_STUDENTS + 1];
-	for (int i = 0; i <= MAX_STUDENTS; i++) assigned[i] = false;
+	// Clear assignedUniversity only for active students (faster than clearing all MAX_STUDENTS)
+	for (int i = 0; i < count; i++) {
+		assignedUniversity[remainingArr[i]] = 0;
+	}
 
+	// Ensure assignedFlag false for active students
+	for (int i = 0; i < count; i++) {
+		assignedFlag[remainingArr[i]] = false;
+	}
+
+	// For each university, sort active students by score desc and assign top N
 	for (int u = 1; u <= globalData.M && count > 0; u++) {
 
 		if (count <= globalData.N) {
-			for (int i = 0; i < count; i++)
-				assignedUniversity[remaining[i]] = u;
+			// All remaining can be assigned to this university
+			for (int i = 0; i < count; i++) {
+				int sid = remainingArr[i];
+				assignedUniversity[sid] = u;
+				assignedFlag[sid] = true;
+			}
+			// no remaining
+			count = 0;
 			break;
 		}
 
-		// Select top N efficiently
-		quickselect_topN(remaining, universityScores, 0, count - 1, globalData.N, u);
+		// build pairs = (id, score) for this university
+		for (int i = 0; i < count; i++) {
+			int sid = remainingArr[i];
+			pairs[i].id = sid;
+			pairs[i].score = universityScores[sid][u];
+		}
 
-		// Assign top N
+		// sort pairs descending by score, tie by smaller id
+		qsort(pairs, count, sizeof(Pair), pair_cmp_desc);
+
+		// take top N
+		int take = globalData.N;
+		int assignedCnt = 0;
+		for (int i = 0; i < take; i++) {
+			int sid = pairs[i].id;
+			assignedUniversity[sid] = u;
+			assignedFlag[sid] = true;
+			assignedList[assignedCnt++] = sid;
+		}
+
+		// build newRemainingArr with unassigned students
 		int newCount = 0;
 		for (int i = 0; i < count; i++) {
-			int sid = remaining[i];
-			if (i < globalData.N) {
-				assignedUniversity[sid] = u;
-				assigned[sid] = true;
-			}
-			else {
-				if (!assigned[sid]) remaining[newCount++] = sid;
+			int sid = remainingArr[i];
+			if (!assignedFlag[sid]) {
+				newRemainingArr[newCount++] = sid;
 			}
 		}
+
+		// clear assignedFlag for those assigned in this round (so next uni can reuse)
+		for (int k = 0; k < assignedCnt; k++) {
+			assignedFlag[assignedList[k]] = false;
+		}
+
+		// swap remainingArr and newRemainingArr (copy newCount back)
+		for (int i = 0; i < newCount; i++)
+			remainingArr[i] = newRemainingArr[i];
 		count = newCount;
 	}
 
