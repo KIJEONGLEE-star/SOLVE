@@ -9,9 +9,6 @@ int activeStudents[MAX_STUDENTS];
 int activeCount = 0;
 bool isActive[MAX_STUDENTS+1] = {false};
 
-// Ultra-optimization: Cache simulation results
-int cachedResults[MAX_STUDENTS+1] = {0};
-bool cacheValid = false;
 
 
 typedef struct {
@@ -38,7 +35,6 @@ void init(int N, int M, int mWeights[][5])
 	// Reset active student tracking
 	activeCount = 0;
 	for(int i=0; i<=MAX_STUDENTS; i++) isActive[i] = false;
-	cacheValid = false;
 	
 	if(N<2 || N>1000 || M<2 || M>30) return;
 	globalData.N=N;
@@ -58,7 +54,6 @@ void add(int mID, int mScores[5])
 		activeStudents[activeCount++] = mID;
 		isActive[mID] = true;
 	}
-	cacheValid = false;
 	
 	for (int j=0; j<NUM_SUBJECTS; j++) studentScores[mID][j] = mScores[j];
 
@@ -92,76 +87,56 @@ void erase(int mID)
 	for(int u=1; u<=globalData.M; u++){
 		universityScores[mID][u] = 0;
 	}
-	cacheValid = false;
 }
 
 int suggest(int mID)
 {
-	// Ultra-optimization: Use cached results if student state hasn't changed
-	if(cacheValid) {
-		return cachedResults[mID];
-	}
-	
-	// Run simulation once and cache all results
 	bool globalSelected[MAX_STUDENTS+1] = {false};
-	for(int i=0; i<=MAX_STUDENTS; i++) cachedResults[i] = 0;
+	int result[MAX_STUDENTS+1] = {0};
 
 	for (int u=1; u<=globalData.M; u++){
-		// Count remaining students for this university
-		int remainingStudents = 0;
-		int remainingList[MAX_STUDENTS];
-		
+		// Count remaining eligible students
+		int remainingCount = 0;
 		for(int i=0; i<activeCount; i++){
-			int m = activeStudents[i];
-			if(!globalSelected[m] && isActive[m]) {
-				remainingList[remainingStudents++] = m;
+			if(!globalSelected[activeStudents[i]] && isActive[activeStudents[i]]) {
+				remainingCount++;
 			}
 		}
 		
-		// Early selection optimization: if remaining <= N, select all without score calculations
-		if(remainingStudents <= globalData.N) {
-			for(int i=0; i<remainingStudents; i++) {
-				int studentID = remainingList[i];
-				globalSelected[studentID] = true;
-				cachedResults[studentID] = u;
+		// Ultra-optimization: if remaining <= N, select all immediately
+		if(remainingCount <= globalData.N) {
+			for(int i=0; i<activeCount; i++){
+				int studentID = activeStudents[i];
+				if(!globalSelected[studentID] && isActive[studentID]) {
+					globalSelected[studentID] = true;
+					result[studentID] = u;
+				}
 			}
 		} else {
-			// Traditional selection when we need to rank students
+			// Only find top N students when needed
 			for(int round = 0; round < globalData.N; round++) {
 				int bestScore = -1;
 				int bestStudent = -1;
 				
-				// Find the best remaining student for this university
 				for(int i=0; i<activeCount; i++){
 					int m = activeStudents[i];
 					if(!globalSelected[m] && isActive[m]) {
-						int currentScore = universityScores[m][u];
-						bool isBetter = false;
-						
-						if(currentScore > bestScore) {
-							isBetter = true;
-						} else if(currentScore == bestScore && m < bestStudent) {
-							isBetter = true;
-						}
-						
-						if(isBetter) {
-							bestScore = currentScore;
+						if(universityScores[m][u] > bestScore || 
+						   (universityScores[m][u] == bestScore && m < bestStudent)) {
+							bestScore = universityScores[m][u];
 							bestStudent = m;
 						}
 					}
 				}
 				
-				if(bestStudent == -1) break; // No more eligible students
-				
+				if(bestStudent == -1) break;
 				globalSelected[bestStudent] = true;
-				cachedResults[bestStudent] = u;
+				result[bestStudent] = u;
 			}
 		}
 	}
 	
-	// Mark cache as valid and return result
-	cacheValid = true;
-	return cachedResults[mID] != 0 ? cachedResults[mID] : -1;
+	return result[mID] != 0 ? result[mID] : -1;
 }
 
 
