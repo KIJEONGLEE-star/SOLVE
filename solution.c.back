@@ -13,11 +13,14 @@ typedef struct {
 
 int studentScores[MAX_STUDENTS+1][NUM_SUBJECTS];
 int uniWeights[MAX_M+1][NUM_SUBJECTS];
-int assignedUni[MAX_STUDENTS+1];
-int remaining[MAX_STUDENTS];
-int remainingCount = 0;
+int assignedUniversity[MAX_STUDENTS+1];
+int activeStudents[MAX_STUDENTS+1];
+int activeCount = 0;
+bool isActive[MAX_STUDENTS+1];
+bool needsUpdate = true;
+int Ncap = 0, Mcap = 0;
 
-// qsort 비교 함수
+// ------------------ qsort 비교 ------------------
 int cmp_desc(const void *a, const void *b) {
     Pair *pa = (Pair*)a;
     Pair *pb = (Pair*)b;
@@ -25,39 +28,57 @@ int cmp_desc(const void *a, const void *b) {
     return pa->id - pb->id;
 }
 
+// ------------------ 초기화 ------------------
 void init(int N, int M, int mWeights[][NUM_SUBJECTS]) {
     for(int i=1;i<=M;i++)
         for(int j=0;j<NUM_SUBJECTS;j++)
             uniWeights[i][j] = mWeights[i-1][j];
 
-    for(int i=0;i<=MAX_STUDENTS;i++)
-        assignedUni[i] = 0;
-    remainingCount = 0;
+    for(int i=0;i<=MAX_STUDENTS;i++){
+        assignedUniversity[i] = 0;
+        isActive[i] = false;
+    }
+    activeCount = 0;
+    needsUpdate = true;
+    Ncap = N;
+    Mcap = M;
 }
 
+// ------------------ 학생 추가 ------------------
 void add(int mID, int mScores[NUM_SUBJECTS]) {
-    for(int i=0;i<NUM_SUBJECTS;i++)
-        studentScores[mID][i] = mScores[i];
-    remaining[remainingCount++] = mID;
+    for(int j=0;j<NUM_SUBJECTS;j++)
+        studentScores[mID][j] = mScores[j];
+    if(!isActive[mID]){
+        activeStudents[activeCount++] = mID;
+        isActive[mID] = true;
+    }
+    needsUpdate = true;
 }
 
+// ------------------ 학생 삭제 ------------------
 void erase(int mID) {
-    for(int i=0;i<remainingCount;i++) {
-        if(remaining[i]==mID){
-            remaining[i] = remaining[--remainingCount];
-            return;
-        }
+    if(isActive[mID]){
+        isActive[mID] = false;
+        needsUpdate = true;
     }
 }
 
-int suggest(int N, int M) {
-    int rCount = remainingCount;
+// ------------------ 시뮬레이션 ------------------
+void simulate(void) {
+    // 초기화
+    for(int i=0;i<=MAX_STUDENTS;i++)
+        assignedUniversity[i] = 0;
+
+    // 남은 학생 리스트
+    int rCount = 0;
     int rList[MAX_STUDENTS];
-    for(int i=0;i<rCount;i++) rList[i]=remaining[i];
+    for(int i=0;i<activeCount;i++){
+        int sid = activeStudents[i];
+        if(isActive[sid])
+            rList[rCount++] = sid;
+    }
 
-    for(int u=1; u<=M; u++) {
-        if(rCount==0) break;
-
+    for(int u=1; u<=Mcap && rCount>0; u++){
         Pair arr[MAX_STUDENTS];
         for(int i=0;i<rCount;i++){
             int sid = rList[i];
@@ -67,16 +88,4 @@ int suggest(int N, int M) {
             arr[i].id = sid;
             arr[i].score = s;
         }
-        qsort(arr, rCount, sizeof(Pair), cmp_desc);
-
-        int take = (N < rCount)? N:rCount;
-        int newRCount = 0;
-        for(int i=0;i<rCount;i++){
-            int sid = arr[i].id;
-            if(i<take) assignedUni[sid]=u;
-            else rList[newRCount++] = sid;
-        }
-        rCount = newRCount;
-    }
-    return 0;
-}
+        qsort(arr, r
