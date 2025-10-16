@@ -98,48 +98,47 @@ void erase(int mID)
 }
 
 void updateAssignments() {
-	bool globalSelected[MAX_STUDENTS+1] = {false};
 	for(int i=0; i<=MAX_STUDENTS; i++) assignedUniversity[i] = 0;
+	
+	int remaining[MAX_STUDENTS];
+	int count = 0;
+	
+	// Copy only active students
+	for(int i=0; i<activeCount; i++) {
+		if(isActive[activeStudents[i]]) {
+			remaining[count++] = activeStudents[i];
+		}
+	}
 
-	for (int u=1; u<=globalData.M; u++){
-		// Count remaining eligible students
-		int remainingCount = 0;
-		for(int i=0; i<activeCount; i++){
-			if(!globalSelected[activeStudents[i]] && isActive[activeStudents[i]]) {
-				remainingCount++;
+	for (int u=1; u<=globalData.M && count > 0; u++){
+		// If remaining <= N, assign all and exit
+		if(count <= globalData.N) {
+			for(int i=0; i<count; i++){
+				assignedUniversity[remaining[i]] = u;
 			}
+			break;
 		}
 		
-		// If remaining <= N, select all immediately
-		if(remainingCount <= globalData.N) {
-			for(int i=0; i<activeCount; i++){
-				int studentID = activeStudents[i];
-				if(!globalSelected[studentID] && isActive[studentID]) {
-					globalSelected[studentID] = true;
-					assignedUniversity[studentID] = u;
+		// Select top N students and remove them from remaining
+		for(int round = 0; round < globalData.N && count > 0; round++) {
+			int bestScore = -1;
+			int bestIdx = -1;
+			
+			for(int i=0; i<count; i++){
+				int m = remaining[i];
+				if(universityScores[m][u] > bestScore || 
+				   (universityScores[m][u] == bestScore && m < remaining[bestIdx])) {
+					bestScore = universityScores[m][u];
+					bestIdx = i;
 				}
 			}
-		} else {
-			// Find top N students
-			for(int round = 0; round < globalData.N; round++) {
-				int bestScore = -1;
-				int bestStudent = -1;
-				
-				for(int i=0; i<activeCount; i++){
-					int m = activeStudents[i];
-					if(!globalSelected[m] && isActive[m]) {
-						if(universityScores[m][u] > bestScore || 
-						   (universityScores[m][u] == bestScore && m < bestStudent)) {
-							bestScore = universityScores[m][u];
-							bestStudent = m;
-						}
-					}
-				}
-				
-				if(bestStudent == -1) break;
-				globalSelected[bestStudent] = true;
-				assignedUniversity[bestStudent] = u;
-			}
+			
+			if(bestIdx == -1) break;
+			
+			// Assign student and remove from remaining list
+			assignedUniversity[remaining[bestIdx]] = u;
+			remaining[bestIdx] = remaining[count-1];
+			count--;
 		}
 	}
 	needsUpdate = false;
