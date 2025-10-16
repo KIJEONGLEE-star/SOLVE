@@ -62,38 +62,23 @@ void add(int mID, int mScores[5])
 	}
 	needsUpdate = true;
 	
+	// Store scores and compute all university scores directly
 	for (int j=0; j<NUM_SUBJECTS; j++) studentScores[mID][j] = mScores[j];
-
+	
 	for(int u=1; u<=globalData.M; u++) {
-		int totalScore = 0;
-		for(int s=0; s<NUM_SUBJECTS; s++){
-			totalScore += studentScores[mID][s] * globalData.universities[u].weights[s];
-		}
-		universityScores[mID][u] = totalScore;
+		universityScores[mID][u] = mScores[0] * globalData.universities[u].weights[0] +
+		                          mScores[1] * globalData.universities[u].weights[1] +
+		                          mScores[2] * globalData.universities[u].weights[2] +
+		                          mScores[3] * globalData.universities[u].weights[3] +
+		                          mScores[4] * globalData.universities[u].weights[4];
 	}
 }
 void erase(int mID)
 {
-	if(mID > MAX_STUDENTS) return;
+	if(mID > MAX_STUDENTS || !isActive[mID]) return;
 	
-	// Remove from active list
-	if(isActive[mID]) {
-		isActive[mID] = false;
-		// Find and remove from activeStudents array
-		for(int i=0; i<activeCount; i++) {
-			if(activeStudents[i] == mID) {
-				activeStudents[i] = activeStudents[activeCount-1];
-				activeCount--;
-				break;
-			}
-		}
-	}
-	
-	for(int j=0; j<NUM_SUBJECTS; j++) studentScores[mID][j] = 0;
-
-	for(int u=1; u<=globalData.M; u++){
-		universityScores[mID][u] = 0;
-	}
+	// Simply mark as inactive - no need to remove from array
+	isActive[mID] = false;
 	needsUpdate = true;
 }
 
